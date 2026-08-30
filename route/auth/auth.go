@@ -140,8 +140,7 @@ func cloneStoredPublicKey(source *storedPublicKey) *storedPublicKey {
 	if source == nil {
 		return nil
 	}
-	copyValue := *source
-	return &copyValue
+	return new(*source)
 }
 
 func sameStoredPublicKey(left *storedPublicKey, right *storedPublicKey) bool {
@@ -411,7 +410,7 @@ func (km *KeyManager) setAuthorizedPrincipal(principal AuthorizedPrincipal) (boo
 		return false, fmt.Errorf("保存授权主体失败： %w", err)
 	}
 
-	km.authorizedPrincipal = &principal
+	km.authorizedPrincipal = new(principal)
 	return true, nil
 }
 
@@ -447,7 +446,7 @@ func (km *KeyManager) loadAuthorizedPrincipal() error {
 		return err
 	}
 
-	km.authorizedPrincipal = &principal
+	km.authorizedPrincipal = new(principal)
 	return nil
 }
 

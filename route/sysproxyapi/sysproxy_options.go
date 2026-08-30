@@ -6,6 +6,5 @@ func cloneSysproxyOptions(opt *sysproxy.Options) *sysproxy.Options {
 	if opt == nil {
 		return &sysproxy.Options{}
 	}
-	copied := *opt
-	return &copied
+	return new(*opt)
 }

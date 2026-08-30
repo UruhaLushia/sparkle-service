@@ -2,6 +2,6 @@
 
 package core
 
-func newCoreLauncher() coreLauncher {
+func newCoreLauncher(_ *launchSession) coreLauncher {
 	return directCoreLauncher{}
 }

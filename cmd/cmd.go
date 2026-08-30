@@ -44,8 +44,8 @@ func newReportedError(err error) error {
 }
 
 func IsReportedError(err error) bool {
-	var target reportedError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[reportedError](err)
+	return ok
 }
 
 func init() {

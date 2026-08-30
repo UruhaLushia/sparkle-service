@@ -362,7 +362,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 	launch.logWriter = logWriter
 
 	controller := newProcessController()
-	cmd, err := newCoreLauncher().Command(launch)
+	command, err := newCoreLauncher(launch).Command(launch)
 	if err != nil {
 		if closeErr := logWriter.Close(); closeErr != nil {
 			log.Printf("关闭核心日志文件失败: %v", closeErr)
@@ -375,6 +375,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 		cm.emitCoreEvent(CoreEventFailed, "核心启动失败", err)
 		return err
 	}
+	launch.addCleanup(command.cleanupNow)
 	launch.addCleanup(func() {
 		if err := logWriter.Close(); err != nil {
 			log.Printf("关闭核心日志文件失败: %v", err)
@@ -382,10 +383,12 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 	})
 	logEventWatcher := newCoreLogEventWatcher(cm)
 	launch.addCleanup(logEventWatcher.Stop)
+	cmd := command.cmd
 	cmd.Stdout = io.MultiWriter(startupWatcher, logEventWatcher, logWriter)
 	cmd.Stderr = io.MultiWriter(errBuffer, startupWatcher, logEventWatcher, logWriter)
 
-	if err := cmd.Start(); err != nil {
+	cmd, err = command.start()
+	if err != nil {
 		controller.Close()
 		launch.cleanupNow()
 		cm.monitoring.Store(false)

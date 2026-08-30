@@ -75,7 +75,7 @@ func readLinuxProcessEnv(pid int) ([]string, error) {
 	}
 
 	env := []string{}
-	for _, item := range strings.Split(string(data), "\x00") {
+	for item := range strings.SplitSeq(string(data), "\x00") {
 		if item == "" {
 			continue
 		}

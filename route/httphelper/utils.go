@@ -148,8 +148,7 @@ func SendJSON(w http.ResponseWriter, status string, message string) {
 }
 
 func SendError(w http.ResponseWriter, err error) {
-	var httpErr *HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*HTTPError](err); ok {
 		SendJSONWithStatus(w, httpErr.StatusCode, "error", httpErr.Message)
 		return
 	}

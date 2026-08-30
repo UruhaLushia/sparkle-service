@@ -166,7 +166,7 @@ func decodeOptionalLaunchProfile(r *http.Request) (*corepkg.LaunchProfile, bool,
 	if !ok {
 		return nil, false, nil
 	}
-	return &profile, true, nil
+	return new(profile), true, nil
 }
 
 func sendCoreReady(w http.ResponseWriter, r *http.Request, message string) {

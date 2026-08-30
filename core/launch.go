@@ -22,6 +22,7 @@ import (
 
 type LaunchProfile struct {
 	CorePath         string            `json:"core_path,omitempty"`
+	Mode             string            `json:"mode,omitempty"`
 	Args             []string          `json:"args,omitempty"`
 	SafePaths        []string          `json:"safe_paths,omitempty"`
 	Env              map[string]string `json:"env,omitempty"`
@@ -32,10 +33,17 @@ type LaunchProfile struct {
 }
 
 type LaunchProfilePatch struct {
+	Mode             *string `json:"mode,omitempty"`
 	LogPath          *string `json:"log_path,omitempty"`
 	SaveLogs         *bool   `json:"save_logs,omitempty"`
 	MaxLogFileSizeMB *int    `json:"max_log_file_size_mb,omitempty"`
 }
+
+const (
+	CoreRunModeAuto    = "auto"
+	CoreRunModeSandbox = "sandbox"
+	CoreRunModeDirect  = "direct"
+)
 
 type launchSession struct {
 	sourcePath     string
@@ -71,7 +79,7 @@ func LoadLaunchProfile() (LaunchProfile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return LaunchProfile{}, nil
+			return LaunchProfile{Mode: CoreRunModeAuto}, nil
 		}
 		return LaunchProfile{}, fmt.Errorf("读取核心启动配置失败：%w", err)
 	}
@@ -120,12 +128,14 @@ func PatchLaunchProfile(patch LaunchProfilePatch) (LaunchProfile, error) {
 		return LaunchProfile{}, err
 	}
 
+	if patch.Mode != nil {
+		profile.Mode = *patch.Mode
+	}
 	if patch.LogPath != nil {
 		profile.LogPath = *patch.LogPath
 	}
 	if patch.SaveLogs != nil {
-		saveLogs := *patch.SaveLogs
-		profile.SaveLogs = &saveLogs
+		profile.SaveLogs = new(*patch.SaveLogs)
 	}
 	if patch.MaxLogFileSizeMB != nil {
 		profile.MaxLogFileSizeMB = *patch.MaxLogFileSizeMB
@@ -215,13 +225,21 @@ func resolveLaunchProfile(profileOverride *LaunchProfile) (LaunchProfile, error)
 func normalizeLaunchProfile(profile LaunchProfile) (LaunchProfile, error) {
 	normalized := LaunchProfile{
 		CorePath:         strings.TrimSpace(profile.CorePath),
+		Mode:             strings.ToLower(strings.TrimSpace(profile.Mode)),
 		Priority:         strings.TrimSpace(profile.Priority),
 		LogPath:          strings.TrimSpace(profile.LogPath),
 		MaxLogFileSizeMB: profile.MaxLogFileSizeMB,
 	}
+	if normalized.Mode == "" {
+		normalized.Mode = CoreRunModeAuto
+	}
+	switch normalized.Mode {
+	case CoreRunModeAuto, CoreRunModeSandbox, CoreRunModeDirect:
+	default:
+		return LaunchProfile{}, fmt.Errorf("mode 仅支持 auto、sandbox 或 direct")
+	}
 	if profile.SaveLogs != nil {
-		saveLogs := *profile.SaveLogs
-		normalized.SaveLogs = &saveLogs
+		normalized.SaveLogs = new(*profile.SaveLogs)
 	}
 
 	if len(profile.Args) > 0 {
@@ -394,6 +412,7 @@ func coreArgName(arg string) (string, bool) {
 
 func isZeroLaunchProfile(profile LaunchProfile) bool {
 	return profile.CorePath == "" &&
+		(profile.Mode == "" || profile.Mode == CoreRunModeAuto) &&
 		profile.Priority == "" &&
 		profile.LogPath == "" &&
 		profile.SaveLogs == nil &&
