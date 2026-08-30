@@ -24,7 +24,7 @@ func (linuxSandboxLauncher) Command(launch *launchSession) (*coreCommand, error)
 		writableDirs = append(writableDirs, filepath.Dir(launch.hookUpFile))
 	}
 
-	cmd, cleanup, err := sandbox.Command(sandbox.Config{
+	sandboxCommand, err := sandbox.NewCommand(sandbox.Config{
 		ExecutablePath: launch.executablePath,
 		Args:           launch.args,
 		Env:            launch.env,
@@ -36,11 +36,13 @@ func (linuxSandboxLauncher) Command(launch *launchSession) (*coreCommand, error)
 	if err != nil {
 		return nil, err
 	}
-	return newCoreCommand(cmd, func() {
-		if err := cleanup(); err != nil {
+	command := newCoreCommand(sandboxCommand.Cmd, func() {
+		if err := sandboxCommand.Cleanup(); err != nil {
 			log.Printf("清理核心沙盒失败：%v", err)
 		}
-	}), nil
+	})
+	command.afterStart = sandboxCommand.AwaitExec
+	return command, nil
 }
 
 func writableDirsFromCoreArgs(args []string) []string {

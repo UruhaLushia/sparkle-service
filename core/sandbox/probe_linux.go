@@ -30,7 +30,7 @@ func runProbe() error {
 	if err != nil {
 		return fmt.Errorf("读取 service 可执行文件路径失败：%w", err)
 	}
-	cmd, cleanup, err := Command(Config{
+	command, err := NewCommand(Config{
 		ExecutablePath: executable,
 		Args:           []string{"--help"},
 		WorkingDir:     filepath.Dir(executable),
@@ -38,18 +38,20 @@ func runProbe() error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if cleanup != nil {
-			_ = cleanup()
-		}
-	}()
 
-	if err := cmd.Run(); err != nil {
+	if err := command.Cmd.Start(); err != nil {
+		_ = command.Cleanup()
 		return fmt.Errorf("chroot 或 namespace 探测失败：%w", err)
 	}
-	if err := cleanup(); err != nil {
-		return err
+	if err := command.AwaitExec(); err != nil {
+		_ = command.Cmd.Process.Kill()
+		_ = command.Cmd.Wait()
+		_ = command.Cleanup()
+		return fmt.Errorf("沙盒 re-exec 探测失败：%w", err)
 	}
-	cleanup = nil
-	return nil
+	if err := command.Cmd.Wait(); err != nil {
+		_ = command.Cleanup()
+		return fmt.Errorf("chroot 或 namespace 探测失败：%w", err)
+	}
+	return command.Cleanup()
 }

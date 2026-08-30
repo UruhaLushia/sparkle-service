@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -54,52 +53,23 @@ type sandboxMount struct {
 	proc     bool
 }
 
-func Command(config Config) (*exec.Cmd, func() error, error) {
-	root, cleanup, err := prepareRoot(config)
-	if err != nil {
-		return nil, nil, err
+func prepareRoot(config Config, root string) error {
+	if err := validateSandboxRoot(root); err != nil {
+		return err
 	}
-
-	cmd := exec.Command(config.ExecutablePath, config.Args...)
-	cmd.Env = config.Env
-	cmd.Dir = config.WorkingDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.SysProcAttr.Chroot = root
-	cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS
-	// Keep the host network namespace: TUN cores must be able to update the host
-	// routes, policy rules and netfilter state through netlink/iptables/nftables.
-	cmd.SysProcAttr.Unshareflags |= syscall.CLONE_NEWNS
-	cmd.SysProcAttr.Pdeathsig = syscall.SIGKILL
-
-	return cmd, cleanup, nil
-}
-
-func prepareRoot(config Config) (string, func() error, error) {
 	if err := ensureXTablesLock(); err != nil {
-		return "", nil, err
+		return err
 	}
 	mounts, err := sandboxMounts(config)
 	if err != nil {
-		return "", nil, err
-	}
-
-	cleanupStaleLinuxSandboxRoots()
-
-	rootTemplate, err := sandboxRootTemplate()
-	if err != nil {
-		return "", nil, err
-	}
-	root, err := os.MkdirTemp("", rootTemplate)
-	if err != nil {
-		return "", nil, fmt.Errorf("创建核心沙盒目录失败：%w", err)
+		return err
 	}
 	if err := mountSandboxRoot(root); err != nil {
-		_ = os.RemoveAll(root)
-		return "", nil, err
+		return err
 	}
 	if err := prepareLinuxSandboxStaticLayout(root); err != nil {
 		_ = cleanupLinuxSandboxRoot(root)
-		return "", nil, err
+		return err
 	}
 
 	mounted := make([]string, 0, len(mounts))
@@ -136,12 +106,44 @@ func prepareRoot(config Config) (string, func() error, error) {
 		target := sandboxTarget(root, mount.target)
 		if err := mountIntoSandbox(target, mount); err != nil {
 			_ = cleanup()
-			return "", nil, err
+			return err
 		}
 		mounted = append(mounted, target)
 	}
 
-	return root, cleanup, nil
+	return nil
+}
+
+func createSandboxRoot() (string, error) {
+	cleanupStaleLinuxSandboxRoots()
+
+	rootTemplate, err := sandboxRootTemplate()
+	if err != nil {
+		return "", err
+	}
+	root, err := os.MkdirTemp("", rootTemplate)
+	if err != nil {
+		return "", fmt.Errorf("创建核心沙盒目录失败：%w", err)
+	}
+	return root, nil
+}
+
+func validateSandboxRoot(root string) error {
+	root = filepath.Clean(root)
+	if filepath.Dir(root) != filepath.Clean(os.TempDir()) ||
+		!strings.HasPrefix(filepath.Base(root), sandboxRootPrefix) {
+		return fmt.Errorf("核心沙盒目录不受信任：%s", root)
+	}
+	info, err := os.Lstat(root)
+	if err != nil {
+		return fmt.Errorf("读取核心沙盒目录失败 %s：%w", root, err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 ||
+		int(stat.Uid) != os.Geteuid() || info.Mode().Perm() != 0o700 {
+		return fmt.Errorf("核心沙盒目录权限无效：%s", root)
+	}
+	return nil
 }
 
 func sandboxRootTemplate() (string, error) {

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build windows
 
 package core
 
@@ -13,9 +13,5 @@ func startupNotifyCommand() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("读取 service 可执行文件路径失败：%w", err)
 	}
-	return shellQuote(executable), nil
-}
-
-func shellQuote(value string) string {
-	return `'` + strings.ReplaceAll(value, `'`, `'\''`) + `'`
+	return `"` + strings.ReplaceAll(executable, `"`, `""`) + `"`, nil
 }

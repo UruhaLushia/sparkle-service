@@ -14,6 +14,7 @@ type directCoreLauncher struct{}
 type coreCommand struct {
 	cmd           *exec.Cmd
 	cleanup       func()
+	afterStart    func() error
 	startFallback func(error) (*coreCommand, error)
 }
 
@@ -35,7 +36,7 @@ func (c *coreCommand) start() (*exec.Cmd, error) {
 	}
 
 	firstCmd := c.cmd
-	if err := firstCmd.Start(); err == nil {
+	if err := c.startAttempt(); err == nil {
 		return firstCmd, nil
 	} else if c.startFallback == nil {
 		c.cleanupNow()
@@ -52,7 +53,8 @@ func (c *coreCommand) start() (*exec.Cmd, error) {
 		copyCommandIO(fallback.cmd, firstCmd)
 		c.cmd = fallback.cmd
 		c.cleanup = fallback.cleanup
-		if err := c.cmd.Start(); err != nil {
+		c.afterStart = fallback.afterStart
+		if err := c.startAttempt(); err != nil {
 			c.cleanupNow()
 			return nil, fmt.Errorf("沙盒启动失败：%v；直接启动失败：%w", firstErr, err)
 		}
@@ -60,11 +62,25 @@ func (c *coreCommand) start() (*exec.Cmd, error) {
 	}
 }
 
+func (c *coreCommand) startAttempt() error {
+	if err := c.cmd.Start(); err != nil {
+		return err
+	}
+	if c.afterStart == nil {
+		return nil
+	}
+	if err := c.afterStart(); err != nil {
+		_ = c.cmd.Process.Kill()
+		_ = c.cmd.Wait()
+		return err
+	}
+	return nil
+}
+
 func copyCommandIO(target *exec.Cmd, source *exec.Cmd) {
 	target.Stdin = source.Stdin
 	target.Stdout = source.Stdout
 	target.Stderr = source.Stderr
-	target.ExtraFiles = source.ExtraFiles
 }
 
 func (directCoreLauncher) Command(launch *launchSession) (*coreCommand, error) {
