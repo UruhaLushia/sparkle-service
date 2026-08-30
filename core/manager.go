@@ -367,7 +367,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 		if closeErr := logWriter.Close(); closeErr != nil {
 			log.Printf("关闭核心日志文件失败: %v", closeErr)
 		}
-		controller.Close()
+		closeProcessController(controller)
 		launch.cleanupNow()
 		cm.monitoring.Store(false)
 		cm.signalStopLocked()
@@ -389,7 +389,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 
 	cmd, err = command.start()
 	if err != nil {
-		controller.Close()
+		closeProcessController(controller)
 		launch.cleanupNow()
 		cm.monitoring.Store(false)
 		cm.signalStopLocked()
@@ -402,7 +402,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 	pid := int32(cmd.Process.Pid)
 	if err := controller.Attach(pid); err != nil {
 		_ = cmd.Process.Kill()
-		controller.Close()
+		closeProcessController(controller)
 		launch.cleanupNow()
 		cm.monitoring.Store(false)
 		cm.signalStopLocked()
@@ -548,7 +548,7 @@ func (cm *CoreManager) stopProcessLocked() error {
 
 func (cm *CoreManager) cleanupLocked() {
 	if cm.controller != nil {
-		_ = cm.controller.Close()
+		closeProcessController(cm.controller)
 		cm.controller = nil
 	}
 	if cm.launch != nil {
@@ -560,6 +560,15 @@ func (cm *CoreManager) cleanupLocked() {
 	cm.startTime = time.Time{}
 	cm.pid.Store(0)
 	cm.isRunning.Store(false)
+}
+
+func closeProcessController(controller processController) {
+	if controller == nil {
+		return
+	}
+	if err := controller.Close(); err != nil {
+		log.Printf("关闭核心进程控制器失败: %v", err)
+	}
 }
 
 func (cm *CoreManager) signalStopLocked() {

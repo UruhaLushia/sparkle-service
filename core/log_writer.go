@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -48,7 +49,9 @@ func (w *boundedLogWriter) Update(settings coreLogSettings) {
 	}
 
 	if w.path != settings.path || !settings.saveLogs {
-		w.closeFileLocked()
+		if err := w.closeFileLocked(); err != nil {
+			w.reportErrorLocked(err)
+		}
 	}
 
 	w.path = settings.path
@@ -61,8 +64,7 @@ func (w *boundedLogWriter) Update(settings coreLogSettings) {
 		if err := w.ensureOpenLocked(); err != nil {
 			w.reportErrorLocked(err)
 		} else if err := w.enforceLimitLocked(); err != nil {
-			w.closeFileLocked()
-			w.reportErrorLocked(err)
+			w.reportErrorLocked(errors.Join(err, w.closeFileLocked()))
 		}
 	}
 }
@@ -81,14 +83,12 @@ func (w *boundedLogWriter) Write(p []byte) (int, error) {
 	}
 
 	if _, err := w.file.Write(p); err != nil {
-		w.closeFileLocked()
-		w.reportErrorLocked(err)
+		w.reportErrorLocked(errors.Join(err, w.closeFileLocked()))
 		return len(p), nil
 	}
 
 	if err := w.enforceLimitLocked(); err != nil {
-		w.closeFileLocked()
-		w.reportErrorLocked(err)
+		w.reportErrorLocked(errors.Join(err, w.closeFileLocked()))
 	}
 
 	return len(p), nil

@@ -33,7 +33,8 @@ func coreControllerProxy(w http.ResponseWriter, r *http.Request) {
 	defer coreControllerTransport.closeIfStale(transport)
 
 	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
+		Rewrite: func(proxyRequest *httputil.ProxyRequest) {
+			req := proxyRequest.Out
 			req.URL.Scheme = "http"
 			req.URL.Host = "localhost"
 			req.URL.Path = targetPath

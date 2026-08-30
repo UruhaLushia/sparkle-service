@@ -140,7 +140,9 @@ func SendJSONWithStatus(w http.ResponseWriter, statusCode int, status string, me
 		Status:  status,
 		Message: message,
 	}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("编码 HTTP JSON 响应失败：%v", err)
+	}
 }
 
 func SendJSON(w http.ResponseWriter, status string, message string) {
