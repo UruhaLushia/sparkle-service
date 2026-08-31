@@ -17,7 +17,7 @@ func createNativeStartupHook(token string) (*coreStartupHook, error) {
 	if err != nil {
 		return nil, fmt.Errorf("创建核心启动通知管道失败：%w", err)
 	}
-	postUpCommand, err := startupNotifyCommand()
+	postUpCommand, executable, err := startupNotifyCommand()
 	if err != nil {
 		_ = listener.Close()
 		return nil, err
@@ -30,7 +30,9 @@ func createNativeStartupHook(token string) (*coreStartupHook, error) {
 		}
 		return false, readStartupNotification(conn, token)
 	}
-	return newCoreStartupHook(waitNotification, pipePath, postUpCommand, noopShellCommand(), startupNotificationEnv("pipe", pipePath, token), func() {
+	notifyEnv := startupNotificationEnv("pipe", pipePath, token)
+	notifyEnv[startupNotifyExecutableEnv] = executable
+	return newCoreStartupHook(waitNotification, pipePath, postUpCommand, noopShellCommand(), notifyEnv, func() {
 		_ = listener.Close()
 	}), nil
 }
