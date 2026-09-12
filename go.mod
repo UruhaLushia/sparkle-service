@@ -3,14 +3,14 @@ module github.com/UruhaLushia/sparkle-service
 go 1.26.0
 
 require (
-	github.com/UruhaLushia/sysproxy-go v1.0.2-0.20260906030449-7f540b47a253
+	github.com/UruhaLushia/sysproxy-go v1.0.2-0.20260912121537-24a6e2f3d17a
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-chi/render v1.0.3
 	github.com/kardianos/service v1.3.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
