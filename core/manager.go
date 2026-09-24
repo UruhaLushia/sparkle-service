@@ -165,7 +165,7 @@ func (cm *CoreManager) ApplyLaunchProfile(profile LaunchProfile, options ...Laun
 		return nil
 	}
 	if cm.isRunning.Load() && cm.pid.Load() > 0 && !slices.Equal(cm.launch.profile.CPUAffinity, profile.CPUAffinity) {
-		if err := setProcessCPUAffinity(cm.pid.Load(), profile.CPUAffinity); err != nil {
+		if err := setProcessCPUAffinity(cm.pid.Load(), profile.CPUAffinity, cm.launch.defaultCPUAffinity); err != nil {
 			return fmt.Errorf("动态更新核心 CPU 绑定失败：%w", err)
 		}
 	}

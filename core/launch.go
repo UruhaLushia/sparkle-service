@@ -47,24 +47,25 @@ const (
 )
 
 type launchSession struct {
-	sourcePath     string
-	executablePath string
-	workingDir     string
-	args           []string
-	env            []string
-	hookUpFile     string
-	waitReady      func(context.Context) error
-	readyNotify    <-chan struct{}
-	cpuPriority    string
-	logPath        string
-	saveLogs       bool
-	maxLogBytes    int64
-	logWriter      *boundedLogWriter
-	fileAccess     fileAccess
-	controllerNet  string
-	controllerAddr string
-	profile        LaunchProfile
-	cleanup        func()
+	sourcePath         string
+	executablePath     string
+	workingDir         string
+	args               []string
+	env                []string
+	hookUpFile         string
+	waitReady          func(context.Context) error
+	readyNotify        <-chan struct{}
+	cpuPriority        string
+	logPath            string
+	saveLogs           bool
+	maxLogBytes        int64
+	logWriter          *boundedLogWriter
+	fileAccess         fileAccess
+	controllerNet      string
+	controllerAddr     string
+	defaultCPUAffinity []int
+	profile            LaunchProfile
+	cleanup            func()
 }
 
 func (s *launchSession) cleanupNow() {
@@ -183,6 +184,14 @@ func (cm *CoreManager) prepareLaunchSession(profileOverride *LaunchProfile, opti
 		return nil, err
 	}
 	args = append([]string{"-post-up", hook.postUpCommand, "-post-down", hook.postDownCommand}, args...)
+	defaultCPUAffinity, err := currentProcessCPUAffinity()
+	if err != nil {
+		hook.cleanup()
+		if controllerCleanup != nil {
+			controllerCleanup()
+		}
+		return nil, fmt.Errorf("读取核心默认 CPU 集合失败：%w", err)
+	}
 
 	workingDir, err := resolveLaunchWorkingDir(corePath, args)
 	if err != nil {
@@ -194,22 +203,23 @@ func (cm *CoreManager) prepareLaunchSession(profileOverride *LaunchProfile, opti
 	}
 
 	return &launchSession{
-		sourcePath:     corePath,
-		executablePath: corePath,
-		workingDir:     workingDir,
-		args:           args,
-		env:            buildLaunchEnv(profile, hook.env),
-		hookUpFile:     hook.upFile,
-		waitReady:      hook.wait,
-		readyNotify:    hook.notifications,
-		cpuPriority:    profile.Priority,
-		logPath:        profile.LogPath,
-		saveLogs:       saveLogs,
-		maxLogBytes:    maxLogFileSizeBytes(profile.MaxLogFileSizeMB),
-		fileAccess:     options.fileAccess,
-		controllerNet:  controllerNet,
-		controllerAddr: controllerAddr,
-		profile:        profile,
+		sourcePath:         corePath,
+		executablePath:     corePath,
+		workingDir:         workingDir,
+		args:               args,
+		env:                buildLaunchEnv(profile, hook.env),
+		hookUpFile:         hook.upFile,
+		waitReady:          hook.wait,
+		readyNotify:        hook.notifications,
+		cpuPriority:        profile.Priority,
+		logPath:            profile.LogPath,
+		saveLogs:           saveLogs,
+		maxLogBytes:        maxLogFileSizeBytes(profile.MaxLogFileSizeMB),
+		fileAccess:         options.fileAccess,
+		controllerNet:      controllerNet,
+		controllerAddr:     controllerAddr,
+		defaultCPUAffinity: defaultCPUAffinity,
+		profile:            profile,
 		cleanup: func() {
 			if controllerCleanup != nil {
 				controllerCleanup()

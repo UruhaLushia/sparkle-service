@@ -90,7 +90,7 @@ func (directCoreLauncher) Command(launch *launchSession) (*coreCommand, error) {
 	configureCommand(cmd)
 	command := newCoreCommand(cmd, nil)
 	command.afterStart = func() error {
-		return setProcessCPUAffinity(int32(cmd.Process.Pid), launch.profile.CPUAffinity)
+		return setProcessCPUAffinity(int32(cmd.Process.Pid), launch.profile.CPUAffinity, launch.defaultCPUAffinity)
 	}
 	return command, nil
 }

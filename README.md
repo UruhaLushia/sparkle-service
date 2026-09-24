@@ -134,7 +134,7 @@ GET /ping
 
 `GET /core/` 返回运行中的核心 PID、内存、CPU 使用率和实际 CPU 绑定范围；`GET /core/profile` 返回配置中的 `cpu_affinity`。
 
-运行中的核心通过 `PATCH /core/profile` 更新 `cpu_affinity` 会立即生效；传入空数组会恢复 service 当前允许的 CPU 集合。
+运行中的核心通过 `PATCH /core/profile` 更新 `cpu_affinity` 会立即生效；Linux root 环境优先使用 cgroup v2 cpuset，动态清空会将核心移回启动前的 cgroup。cgroup 不可用时回退到逐线程 syscall，并恢复启动前的 CPU 集合。其他平台使用系统进程 affinity API。
 
 **启动配置（LaunchProfile）字段：**
 

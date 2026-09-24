@@ -24,10 +24,9 @@ func (linuxDirectLauncher) Command(launch *launchSession) (*coreCommand, error) 
 		Args:           launch.args,
 		Env:            launch.env,
 		WorkingDir:     launch.workingDir,
-		CPUAffinity:    launch.profile.CPUAffinity,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return linuxReexecCoreCommand(command), nil
+	return linuxReexecCoreCommand(command, launch), nil
 }
