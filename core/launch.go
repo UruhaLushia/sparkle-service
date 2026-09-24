@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -244,11 +245,15 @@ func normalizeLaunchProfile(profile LaunchProfile) (LaunchProfile, error) {
 	if profile.SaveLogs != nil {
 		normalized.SaveLogs = new(*profile.SaveLogs)
 	}
-	if runtime.GOOS == "linux" && len(profile.CPUAffinity) > 0 {
+	if (runtime.GOOS == "linux" || runtime.GOOS == "windows") && len(profile.CPUAffinity) > 0 {
 		normalized.CPUAffinity = slices.Clone(profile.CPUAffinity)
 		for _, cpu := range normalized.CPUAffinity {
-			if cpu < 0 || cpu >= 1024 {
-				return LaunchProfile{}, fmt.Errorf("cpu_affinity 中的 CPU 编号必须在 0 到 1023 之间：%d", cpu)
+			maxCPU := 1024
+			if runtime.GOOS == "windows" {
+				maxCPU = bits.UintSize
+			}
+			if cpu < 0 || cpu >= maxCPU {
+				return LaunchProfile{}, fmt.Errorf("cpu_affinity 中的 CPU 编号必须在 0 到 %d 之间：%d", maxCPU-1, cpu)
 			}
 		}
 		slices.Sort(normalized.CPUAffinity)
