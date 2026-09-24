@@ -140,7 +140,8 @@ GET /ping
   "args": ["--config", "/etc/mihomo/config.yaml"],
   "safe_paths": ["/etc/mihomo"],
   "env": { "KEY": "value" },
-  "mihomo_cpu_priority": "normal",
+  "cpu_affinity": [2, 3],
+  "cpu_priority": "normal",
   "log_path": "/var/log/sparkle/core.log",
   "save_logs": true,
   "max_log_file_size_mb": 10

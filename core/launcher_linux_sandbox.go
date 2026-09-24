@@ -29,6 +29,8 @@ func (linuxSandboxLauncher) Command(launch *launchSession) (*coreCommand, error)
 		Args:           launch.args,
 		Env:            launch.env,
 		WorkingDir:     launch.workingDir,
+		CPUAffinity:    launch.profile.CPUAffinity,
+		Sandbox:        true,
 		ReadOnlyPaths:  []string{serviceExecutable},
 		WritablePaths:  launch.profile.SafePaths,
 		WritableDirs:   writableDirs,
@@ -36,13 +38,17 @@ func (linuxSandboxLauncher) Command(launch *launchSession) (*coreCommand, error)
 	if err != nil {
 		return nil, err
 	}
+	return linuxReexecCoreCommand(sandboxCommand), nil
+}
+
+func linuxReexecCoreCommand(sandboxCommand *sandbox.Command) *coreCommand {
 	command := newCoreCommand(sandboxCommand.Cmd, func() {
 		if err := sandboxCommand.Cleanup(); err != nil {
 			log.Printf("清理核心沙盒失败：%v", err)
 		}
 	})
 	command.afterStart = sandboxCommand.AwaitExec
-	return command, nil
+	return command
 }
 
 func writableDirsFromCoreArgs(args []string) []string {

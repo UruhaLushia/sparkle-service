@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -23,13 +24,15 @@ type LaunchProfile struct {
 	Args             []string          `json:"args,omitempty"`
 	SafePaths        []string          `json:"safe_paths,omitempty"`
 	Env              map[string]string `json:"env,omitempty"`
-	Priority         string            `json:"mihomo_cpu_priority,omitempty"`
+	Priority         string            `json:"cpu_priority,omitempty"`
+	CPUAffinity      []int             `json:"cpu_affinity,omitempty"`
 	LogPath          string            `json:"log_path,omitempty"`
 	SaveLogs         *bool             `json:"save_logs,omitempty"`
 	MaxLogFileSizeMB int               `json:"max_log_file_size_mb,omitempty"`
 }
 
 type LaunchProfilePatch struct {
+	CPUAffinity      *[]int  `json:"cpu_affinity,omitempty"`
 	Mode             *string `json:"mode,omitempty"`
 	LogPath          *string `json:"log_path,omitempty"`
 	SaveLogs         *bool   `json:"save_logs,omitempty"`
@@ -127,6 +130,9 @@ func PatchLaunchProfile(patch LaunchProfilePatch) (LaunchProfile, error) {
 
 	if patch.Mode != nil {
 		profile.Mode = *patch.Mode
+	}
+	if patch.CPUAffinity != nil {
+		profile.CPUAffinity = slices.Clone(*patch.CPUAffinity)
 	}
 	if patch.LogPath != nil {
 		profile.LogPath = *patch.LogPath
@@ -237,6 +243,16 @@ func normalizeLaunchProfile(profile LaunchProfile) (LaunchProfile, error) {
 	}
 	if profile.SaveLogs != nil {
 		normalized.SaveLogs = new(*profile.SaveLogs)
+	}
+	if runtime.GOOS == "linux" && len(profile.CPUAffinity) > 0 {
+		normalized.CPUAffinity = slices.Clone(profile.CPUAffinity)
+		for _, cpu := range normalized.CPUAffinity {
+			if cpu < 0 || cpu >= 1024 {
+				return LaunchProfile{}, fmt.Errorf("cpu_affinity 中的 CPU 编号必须在 0 到 1023 之间：%d", cpu)
+			}
+		}
+		slices.Sort(normalized.CPUAffinity)
+		normalized.CPUAffinity = slices.Compact(normalized.CPUAffinity)
 	}
 
 	if len(profile.Args) > 0 {
@@ -411,6 +427,7 @@ func isZeroLaunchProfile(profile LaunchProfile) bool {
 	return profile.CorePath == "" &&
 		(profile.Mode == "" || profile.Mode == CoreRunModeAuto) &&
 		profile.Priority == "" &&
+		len(profile.CPUAffinity) == 0 &&
 		profile.LogPath == "" &&
 		profile.SaveLogs == nil &&
 		profile.MaxLogFileSizeMB == 0 &&

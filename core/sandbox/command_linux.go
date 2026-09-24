@@ -35,17 +35,24 @@ type Command struct {
 }
 
 func NewCommand(config Config) (*Command, error) {
-	if os.Geteuid() != 0 {
-		return nil, fmt.Errorf("核心沙盒需要 root 权限")
+	root := ""
+	if config.Sandbox {
+		if os.Geteuid() != 0 {
+			return nil, fmt.Errorf("核心沙盒需要 root 权限")
+		}
+		if err := validateWritablePaths(config.WritablePaths); err != nil {
+			return nil, err
+		}
+		var err error
+		root, err = createSandboxRoot()
+		if err != nil {
+			return nil, err
+		}
 	}
-	if err := validateWritablePaths(config.WritablePaths); err != nil {
-		return nil, err
-	}
+	return newReexecCommand(config, root)
+}
 
-	root, err := createSandboxRoot()
-	if err != nil {
-		return nil, err
-	}
+func newReexecCommand(config Config, root string) (*Command, error) {
 	fail := func(err error) (*Command, error) {
 		_ = cleanupLinuxSandboxRoot(root)
 		return nil, err
@@ -72,9 +79,11 @@ func NewCommand(config Config) (*Command, error) {
 	cmd.Env = reexecEnvironment()
 	cmd.ExtraFiles = []*os.File{configFile, statusWriter}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid:    true,
-		Cloneflags: syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS,
-		Pdeathsig:  syscall.SIGKILL,
+		Setpgid:   true,
+		Pdeathsig: syscall.SIGKILL,
+	}
+	if root != "" {
+		cmd.SysProcAttr.Cloneflags = syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS
 	}
 	// Deliberately keep the host network namespace and root network capabilities:
 	// TUN, routes, policy rules and netfilter must affect the host.

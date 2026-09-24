@@ -40,6 +40,8 @@ type Config struct {
 	Args           []string
 	Env            []string
 	WorkingDir     string
+	CPUAffinity    []int
+	Sandbox        bool
 	ReadOnlyPaths  []string
 	WritablePaths  []string
 	WritableDirs   []string

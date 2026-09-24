@@ -34,6 +34,7 @@ func runProbe() error {
 		ExecutablePath: executable,
 		Args:           []string{"--help"},
 		WorkingDir:     filepath.Dir(executable),
+		Sandbox:        true,
 	})
 	if err != nil {
 		return err
