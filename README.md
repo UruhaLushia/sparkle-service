@@ -132,6 +132,8 @@ GET /ping
 | POST   | `/core/restart`    | 重启核心进程                 |
 | ANY    | `/core/controller` | 透传至核心控制器接口         |
 
+`GET /core/` 返回运行中的核心 PID、内存、CPU 使用率和实际 CPU 绑定范围；`GET /core/profile` 返回配置中的 `cpu_affinity`。
+
 **启动配置（LaunchProfile）字段：**
 
 ```json
@@ -177,7 +179,10 @@ GET /ping
 
 | 方法   | 路径           | 说明         |
 | ------ | -------------- | ------------ |
+| GET    | `/sys/cpu`     | 获取可用于核心绑定的 CPU 信息 |
 | POST   | `/sys/dns/set` | 设置 DNS     |
+
+`GET /sys/cpu` 返回逻辑 CPU 编号、物理核心信息、型号、可用状态和性能/能效核心类型（系统提供时）。`available: true` 表示 service 当前允许使用该 CPU，可直接用于 `cpu_affinity`；`affinity_supported: false` 表示当前平台只能提供 CPU 列表，无法确认 service 的实际亲和性限制。
 
 **请求体示例：**
 

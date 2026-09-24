@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 )
 
 type dnsRequest struct {
@@ -17,9 +18,19 @@ type dnsRequest struct {
 func Router() http.Handler {
 	r := chi.NewRouter()
 
+	r.Get("/cpu", cpuInfo)
 	r.Post("/dns/set", setDns)
 
 	return r
+}
+
+func cpuInfo(w http.ResponseWriter, r *http.Request) {
+	info, err := sys.GetCPUInfo()
+	if err != nil {
+		httphelper.SendError(w, err)
+		return
+	}
+	render.JSON(w, r, info)
 }
 
 func setDns(w http.ResponseWriter, r *http.Request) {

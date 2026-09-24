@@ -66,6 +66,8 @@ type ProcessInfo struct {
 	PID          int32     `json:"pid"`
 	Memory       uint64    `json:"memory"`
 	MemoryFormat string    `json:"memory_format"`
+	CPUPercent   float64   `json:"cpu_percent"`
+	CPUAffinity  []int     `json:"cpu_affinity,omitempty"`
 	StartTime    time.Time `json:"start_time"`
 	Uptime       string    `json:"uptime"`
 	LaunchMode   string    `json:"launch_mode,omitempty"`
@@ -628,6 +630,15 @@ func (cm *CoreManager) GetProcessInfo() (*ProcessInfo, error) {
 	if memInfo, err := proc.MemoryInfo(); err == nil {
 		info.Memory = memInfo.RSS
 		info.MemoryFormat = formatMemory(memInfo.RSS)
+	}
+	if cpuPercent, err := proc.CPUPercent(); err == nil {
+		info.CPUPercent = cpuPercent
+	}
+	if affinity, err := proc.CPUAffinity(); err == nil {
+		info.CPUAffinity = make([]int, 0, len(affinity))
+		for _, cpu := range affinity {
+			info.CPUAffinity = append(info.CPUAffinity, int(cpu))
+		}
 	}
 
 	return info, nil
