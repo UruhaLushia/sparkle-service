@@ -86,7 +86,10 @@ func coreSaveProfile(w http.ResponseWriter, r *http.Request) {
 		httphelper.SendError(w, httphelper.BadRequest(err.Error()))
 		return
 	}
-	cm.ApplyLaunchProfile(normalized, coreLaunchOptions(r)...)
+	if err := cm.ApplyLaunchProfile(normalized, coreLaunchOptions(r)...); err != nil {
+		httphelper.SendError(w, err)
+		return
+	}
 
 	httphelper.SendJSON(w, "success", "核心启动配置已更新")
 }
@@ -103,7 +106,10 @@ func corePatchProfile(w http.ResponseWriter, r *http.Request) {
 		httphelper.SendError(w, httphelper.BadRequest(err.Error()))
 		return
 	}
-	cm.ApplyLaunchProfile(profile, coreLaunchOptions(r)...)
+	if err := cm.ApplyLaunchProfile(profile, coreLaunchOptions(r)...); err != nil {
+		httphelper.SendError(w, err)
+		return
+	}
 
 	httphelper.SendJSON(w, "success", "核心启动配置已更新")
 }

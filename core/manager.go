@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -156,12 +157,17 @@ func (cm *CoreManager) RestartCoreWithProfile(profile *LaunchProfile, options ..
 	return cm.startCoreLocked(profile, collectLaunchOptions(options))
 }
 
-func (cm *CoreManager) ApplyLaunchProfile(profile LaunchProfile, options ...LaunchOption) {
+func (cm *CoreManager) ApplyLaunchProfile(profile LaunchProfile, options ...LaunchOption) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
 	if cm.launch == nil {
-		return
+		return nil
+	}
+	if cm.isRunning.Load() && cm.pid.Load() > 0 && !slices.Equal(cm.launch.profile.CPUAffinity, profile.CPUAffinity) {
+		if err := setProcessCPUAffinity(cm.pid.Load(), profile.CPUAffinity); err != nil {
+			return fmt.Errorf("动态更新核心 CPU 绑定失败：%w", err)
+		}
 	}
 
 	launchOptions := collectLaunchOptions(options)
@@ -173,6 +179,7 @@ func (cm *CoreManager) ApplyLaunchProfile(profile LaunchProfile, options ...Laun
 	cm.launch.profile.LogPath = profile.LogPath
 	cm.launch.profile.SaveLogs = profile.SaveLogs
 	cm.launch.profile.MaxLogFileSizeMB = profile.MaxLogFileSizeMB
+	cm.launch.profile.CPUAffinity = slices.Clone(profile.CPUAffinity)
 	cm.launch.fileAccess = settings.access
 	cm.launch.logPath = settings.path
 	cm.launch.saveLogs = settings.saveLogs
@@ -181,6 +188,7 @@ func (cm *CoreManager) ApplyLaunchProfile(profile LaunchProfile, options ...Laun
 	if cm.launch.logWriter != nil {
 		cm.launch.logWriter.Update(settings)
 	}
+	return nil
 }
 
 func (cm *CoreManager) ControllerEndpoint() (string, string, error) {
