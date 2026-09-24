@@ -5,14 +5,19 @@ package sys
 import (
 	"os"
 
-	"github.com/shirou/gopsutil/v4/process"
+	"golang.org/x/sys/unix"
 )
 
 func currentProcessCPUAffinity() ([]int32, bool, error) {
-	proc, err := process.NewProcess(int32(os.Getpid()))
-	if err != nil {
-		return nil, false, err
+	var mask unix.CPUSet
+	if err := unix.SchedGetaffinity(os.Getpid(), &mask); err != nil {
+		return nil, true, err
 	}
-	ids, err := proc.CPUAffinity()
-	return ids, true, err
+	ids := make([]int32, 0, mask.Count())
+	for id := range 1024 {
+		if mask.IsSet(id) {
+			ids = append(ids, int32(id))
+		}
+	}
+	return ids, true, nil
 }

@@ -182,7 +182,7 @@ GET /ping
 | GET    | `/sys/cpu`     | 获取可用于核心绑定的 CPU 信息 |
 | POST   | `/sys/dns/set` | 设置 DNS     |
 
-`GET /sys/cpu` 返回逻辑 CPU 编号、物理核心信息、型号、可用状态和性能/能效核心类型（系统提供时）。`available: true` 表示 service 当前允许使用该 CPU，可直接用于 `cpu_affinity`；`affinity_supported: false` 表示当前平台只能提供 CPU 列表，无法确认 service 的实际亲和性限制。
+`GET /sys/cpu` 返回逻辑 CPU 编号、物理核心信息、型号、可用状态和整数 `core_class`。Windows 返回原始 `EfficiencyClass`；Linux 优先返回非零 `topology/core_type`，否则读取 `cpu_capacity`。名称和分组由前端判断，数值不可跨平台比较；无法读取时返回 0（Windows 的有效等级也可能为 0）。`available: true` 表示 service 当前允许使用该 CPU，可直接用于 `cpu_affinity`；`affinity_supported: false` 表示当前平台只能提供 CPU 列表，无法确认 service 的实际亲和性限制。
 
 **请求体示例：**
 

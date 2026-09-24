@@ -2,11 +2,7 @@ package sys
 
 import (
 	"fmt"
-	"os"
-	"runtime"
 	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 )
@@ -17,7 +13,7 @@ type CPUInfo struct {
 	PhysicalID string  `json:"physical_id,omitempty"`
 	ModelName  string  `json:"model_name,omitempty"`
 	Mhz        float64 `json:"mhz,omitempty"`
-	CoreType   string  `json:"core_type,omitempty"`
+	CoreClass  int     `json:"core_class"`
 	Available  bool    `json:"available"`
 }
 
@@ -43,20 +39,22 @@ func GetCPUInfo() (CPUInfoResponse, error) {
 	}
 
 	result := CPUInfoResponse{CPUs: make([]CPUInfo, 0, len(stats)), AffinitySupported: supported}
+	coreClasses := cpuCoreClasses()
 	for _, stat := range stats {
 		_, isAvailable := available[int(stat.CPU)]
 		if !supported {
 			isAvailable = true
 		}
-		result.CPUs = append(result.CPUs, CPUInfo{
+		item := CPUInfo{
 			ID:         int(stat.CPU),
 			CoreID:     stat.CoreID,
 			PhysicalID: stat.PhysicalID,
 			ModelName:  stat.ModelName,
 			Mhz:        stat.Mhz,
-			CoreType:   cpuCoreType(int(stat.CPU)),
+			CoreClass:  coreClasses[int(stat.CPU)],
 			Available:  isAvailable,
-		})
+		}
+		result.CPUs = append(result.CPUs, item)
 	}
 	sort.Slice(result.CPUs, func(i, j int) bool { return result.CPUs[i].ID < result.CPUs[j].ID })
 	result.LogicalCPUCount = len(result.CPUs)
@@ -66,22 +64,4 @@ func GetCPUInfo() (CPUInfoResponse, error) {
 		}
 	}
 	return result, nil
-}
-
-func cpuCoreType(id int) string {
-	if runtime.GOOS != "linux" {
-		return ""
-	}
-	data, err := os.ReadFile("/sys/devices/system/cpu/cpu" + strconv.Itoa(id) + "/topology/core_type")
-	if err != nil {
-		return ""
-	}
-	switch strings.TrimSpace(string(data)) {
-	case "1":
-		return "performance"
-	case "2":
-		return "efficiency"
-	default:
-		return ""
-	}
 }
