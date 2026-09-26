@@ -1,6 +1,6 @@
 //go:build windows
 
-package core
+package process
 
 import (
 	"fmt"
@@ -14,11 +14,11 @@ import (
 var setProcessAffinityMask = windows.NewLazySystemDLL("kernel32.dll").NewProc("SetProcessAffinityMask")
 var getProcessAffinityMask = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetProcessAffinityMask")
 
-func currentProcessCPUAffinity() ([]int, error) {
+func CurrentCPUAffinity() ([]int, error) {
 	return nil, nil
 }
 
-func setProcessCPUAffinity(pid int32, cpus []int, restore ...[]int) error {
+func SetCPUAffinity(pid int32, cpus []int, restore ...[]int) error {
 	var mask uintptr
 	if len(cpus) == 0 {
 		serviceHandle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(os.Getpid()))

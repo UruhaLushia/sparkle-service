@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"time"
+
+	"github.com/UruhaLushia/sparkle-service/core/process"
 )
 
 func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launchOptions) error {
@@ -28,7 +30,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 	})
 	launch.logWriter = logWriter
 
-	controller := newProcessController()
+	controller := process.NewController()
 	command, err := newCoreLauncher(launch).Command(launch)
 	if err != nil {
 		if closeErr := logWriter.Close(); closeErr != nil {
@@ -79,7 +81,7 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 		return attachErr
 	}
 
-	if err := setProcessPriority(pid, launch.cpuPriority); err != nil {
+	if err := process.SetPriority(pid, launch.cpuPriority); err != nil {
 		log.Printf("设置核心进程优先级失败: %v", err)
 	}
 

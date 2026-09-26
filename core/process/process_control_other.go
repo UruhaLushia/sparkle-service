@@ -1,27 +1,25 @@
 //go:build !windows
 
-package core
+package process
 
 import (
 	"fmt"
 	"os/exec"
 	"syscall"
 	"time"
-
-	"github.com/shirou/gopsutil/v4/process"
 )
 
 type noopProcessController struct{}
 
-func newProcessController() processController {
+func NewController() Controller {
 	return &noopProcessController{}
 }
 
-func configureCommand(cmd *exec.Cmd) {
+func ConfigureCommand(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-func setProcessPriority(pid int32, priority string) error {
+func SetPriority(pid int32, priority string) error {
 	if priority == "" || priority == "PRIORITY_NORMAL" {
 		return nil
 	}
@@ -82,7 +80,7 @@ func (c *noopProcessController) Close() error {
 
 func waitForUnixProcessExit(pid int32, attempts int, interval time.Duration) (bool, error) {
 	for range attempts {
-		exists, err := process.PidExists(pid)
+		exists, err := Exists(pid)
 		if err != nil {
 			return false, err
 		}

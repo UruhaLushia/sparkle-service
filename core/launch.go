@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/UruhaLushia/sparkle-service/core/controller"
+	"github.com/UruhaLushia/sparkle-service/core/process"
 	"github.com/UruhaLushia/sparkle-service/core/security"
 )
 
@@ -184,7 +185,7 @@ func (cm *CoreManager) prepareLaunchSession(profileOverride *LaunchProfile, opti
 		return nil, err
 	}
 	args = append([]string{"-post-up", hook.postUpCommand, "-post-down", hook.postDownCommand}, args...)
-	defaultCPUAffinity, err := currentProcessCPUAffinity()
+	defaultCPUAffinity, err := process.CurrentCPUAffinity()
 	if err != nil {
 		hook.cleanup()
 		if controllerCleanup != nil {

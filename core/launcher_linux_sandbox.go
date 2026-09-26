@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/UruhaLushia/sparkle-service/core/process"
 	"github.com/UruhaLushia/sparkle-service/core/sandbox"
 )
 
@@ -50,7 +51,7 @@ func linuxReexecCoreCommand(sandboxCommand *sandbox.Command, launch *launchSessi
 		if err := sandboxCommand.AwaitExec(); err != nil {
 			return err
 		}
-		return setProcessCPUAffinity(int32(command.cmd.Process.Pid), launch.profile.CPUAffinity, launch.defaultCPUAffinity)
+		return process.SetCPUAffinity(int32(command.cmd.Process.Pid), launch.profile.CPUAffinity, launch.defaultCPUAffinity)
 	}
 	return command
 }

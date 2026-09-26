@@ -1,6 +1,6 @@
 //go:build linux
 
-package core
+package process
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func currentProcessCPUAffinity() ([]int, error) {
+func CurrentCPUAffinity() ([]int, error) {
 	var mask unix.CPUSet
 	if err := unix.SchedGetaffinity(0, &mask); err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func currentProcessCPUAffinity() ([]int, error) {
 	return cpus, nil
 }
 
-func setProcessCPUAffinity(pid int32, cpus []int, restore ...[]int) error {
+func SetCPUAffinity(pid int32, cpus []int, restore ...[]int) error {
 	if pid <= 0 {
 		return fmt.Errorf("无效的核心进程 PID：%d", pid)
 	}

@@ -13,9 +13,10 @@ import (
 	"time"
 
 	"github.com/UruhaLushia/sparkle-service/core/controller"
+	"github.com/UruhaLushia/sparkle-service/core/process"
 	"github.com/UruhaLushia/sparkle-service/core/security"
 
-	"github.com/shirou/gopsutil/v4/process"
+	ps "github.com/shirou/gopsutil/v4/process"
 )
 
 const (
@@ -28,16 +29,9 @@ const (
 	startupLineLimit      = 16 * 1024
 )
 
-type processController interface {
-	Attach(pid int32) error
-	PIDs() ([]int32, error)
-	Stop(pid int32) error
-	Close() error
-}
-
 type CoreManager struct {
 	cmd                    *exec.Cmd
-	controller             processController
+	controller             process.Controller
 	launch                 *launchSession
 	eventHub               coreEventHub
 	isRunning              atomic.Bool
@@ -179,7 +173,7 @@ func (cm *CoreManager) ApplyLaunchProfile(profile LaunchProfile, options ...Laun
 		return nil
 	}
 	if cm.isRunning.Load() && cm.pid.Load() > 0 && !slices.Equal(cm.launch.profile.CPUAffinity, profile.CPUAffinity) {
-		if err := setProcessCPUAffinity(cm.pid.Load(), profile.CPUAffinity, cm.launch.defaultCPUAffinity); err != nil {
+		if err := process.SetCPUAffinity(cm.pid.Load(), profile.CPUAffinity, cm.launch.defaultCPUAffinity); err != nil {
 			return fmt.Errorf("动态更新核心 CPU 绑定失败：%w", err)
 		}
 	}
@@ -240,7 +234,7 @@ func (cm *CoreManager) cleanupLocked() {
 	cm.isRunning.Store(false)
 }
 
-func closeProcessController(controller processController) {
+func closeProcessController(controller process.Controller) {
 	if controller == nil {
 		return
 	}
@@ -427,7 +421,7 @@ func (cm *CoreManager) takeoverRestartedProcess() bool {
 	return false
 }
 
-func findManagedCorePID(controller processController, oldPID int32, launch *launchSession) (int32, bool) {
+func findManagedCorePID(controller process.Controller, oldPID int32, launch *launchSession) (int32, bool) {
 	pids, err := controller.PIDs()
 	if err != nil {
 		log.Printf("查询核心进程组失败: %v", err)
@@ -445,7 +439,7 @@ func findManagedCorePID(controller processController, oldPID int32, launch *laun
 		}
 
 		createTime := int64(0)
-		if proc, err := process.NewProcess(pid); err == nil {
+		if proc, err := ps.NewProcess(pid); err == nil {
 			if value, err := proc.CreateTime(); err == nil {
 				createTime = value
 			}
@@ -464,7 +458,7 @@ func isCoreProcessCandidate(pid int32, launch *launchSession) bool {
 		return false
 	}
 
-	proc, err := process.NewProcess(pid)
+	proc, err := ps.NewProcess(pid)
 	if err != nil {
 		return false
 	}
@@ -482,7 +476,7 @@ func isCoreProcessCandidate(pid int32, launch *launchSession) bool {
 }
 
 func (cm *CoreManager) updateStartTimeFromPIDLocked(pid int32) {
-	proc, err := process.NewProcess(pid)
+	proc, err := ps.NewProcess(pid)
 	if err != nil {
 		cm.startTime = time.Now()
 		return
@@ -522,7 +516,7 @@ func (cm *CoreManager) monitorPID(stopChan <-chan struct{}) {
 				continue
 			}
 
-			exists, err := process.PidExists(pid)
+			exists, err := process.Exists(pid)
 			if err != nil {
 				log.Printf("检查核心进程失败: %v", err)
 				continue
@@ -634,7 +628,7 @@ func (cm *CoreManager) GetProcessInfo() (*ProcessInfo, error) {
 		return nil, fmt.Errorf("进程未运行")
 	}
 
-	proc, err := process.NewProcess(pid)
+	proc, err := ps.NewProcess(pid)
 	if err != nil {
 		return nil, fmt.Errorf("获取进程信息失败：%w", err)
 	}

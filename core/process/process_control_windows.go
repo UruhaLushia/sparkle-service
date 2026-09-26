@@ -1,6 +1,6 @@
 //go:build windows
 
-package core
+package process
 
 import (
 	"errors"
@@ -10,7 +10,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/sys/windows"
 )
 
@@ -18,18 +17,18 @@ type windowsProcessController struct {
 	job windows.Handle
 }
 
-func newProcessController() processController {
+func NewController() Controller {
 	return &windowsProcessController{}
 }
 
-func configureCommand(cmd *exec.Cmd) {
+func ConfigureCommand(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: windows.CREATE_BREAKAWAY_FROM_JOB | windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
 	}
 }
 
-func setProcessPriority(pid int32, priority string) error {
+func SetPriority(pid int32, priority string) error {
 	if priority == "" || priority == "PRIORITY_NORMAL" {
 		return nil
 	}
@@ -174,7 +173,7 @@ func (c *windowsProcessController) Close() error {
 
 func waitForProcessExit(pid int32, attempts int, interval time.Duration) (bool, error) {
 	for range attempts {
-		exists, err := process.PidExists(pid)
+		exists, err := Exists(pid)
 		if err != nil {
 			return false, err
 		}

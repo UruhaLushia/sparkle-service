@@ -1,6 +1,6 @@
 //go:build linux
 
-package core
+package process
 
 import (
 	"fmt"
