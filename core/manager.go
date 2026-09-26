@@ -227,6 +227,7 @@ func (cm *CoreManager) cleanupLocked() {
 		cm.launch.cleanupNow()
 		cm.launch = nil
 	}
+	removeRuntimeRecord()
 
 	cm.cmd = nil
 	cm.startTime = time.Time{}
@@ -302,10 +303,10 @@ func processExitReason(err error, output string) string {
 	if !errors.As(err, &exitErr) {
 		return "abnormal"
 	}
-	if exitErr.ProcessState.ExitCode() == 0 {
+	if exitErr.ExitCode() == 0 {
 		return "normal"
 	}
-	if exitErr.ProcessState.ExitCode() < 0 {
+	if exitErr.ExitCode() < 0 {
 		return "signal"
 	}
 	return "exit_error"

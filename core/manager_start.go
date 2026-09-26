@@ -118,6 +118,9 @@ func (cm *CoreManager) startProcessLocked(profile *LaunchProfile, options launch
 		launch.addCleanup(cleanup)
 	}
 	cm.monitoring.Store(true)
+	if err := writeRuntimeRecord(pid, launch.executablePath); err != nil {
+		log.Printf("保存核心运行记录失败: %v", err)
+	}
 	go cm.monitorProcess(cmd, errBuffer, processDone)
 	if launch.readyNotify != nil {
 		go cm.monitorStartupNotifications(launch, cm.stopChan)

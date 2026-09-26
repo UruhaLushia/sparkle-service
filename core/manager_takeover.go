@@ -42,6 +42,9 @@ func (cm *CoreManager) takeoverRestartedProcess() bool {
 				cm.updateStartTimeFromPIDLocked(newPID)
 				cm.startPIDPollingLocked(cm.stopChan)
 				cm.mutex.Unlock()
+				if err := writeRuntimeRecord(newPID, launch.executablePath); err != nil {
+					log.Printf("更新接管后的核心运行记录失败: %v", err)
+				}
 				log.Printf("核心进程已重新接管 (PID: %d -> %d)", oldPID, newPID)
 				cm.publishCoreEvent(cm.newCoreEvent(CoreEventTakeover, "核心进程已重新接管", nil, newPID, oldPID))
 				return true

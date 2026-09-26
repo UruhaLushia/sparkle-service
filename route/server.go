@@ -64,6 +64,9 @@ func Start(addr string) error {
 	} else {
 		log.Println("警告：请求方身份绑定未启用")
 	}
+	if err := coreapi.ReconcileRuntimeState(); err != nil {
+		log.Printf("警告：清理上次核心运行状态失败: %v", err)
+	}
 	if err := coreapi.RestoreDesiredState(); err != nil {
 		log.Printf("警告：恢复核心运行状态失败: %v", err)
 	}

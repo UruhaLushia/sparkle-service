@@ -60,6 +60,14 @@ func RestoreDesiredState() error {
 	return cm.RestoreDesiredState()
 }
 
+func ReconcileRuntimeState() error {
+	if !isInit.Load() || cm == nil {
+		cm = corepkg.NewCoreManager(corepkg.WithTrafficMonitorPipeSDDL(trafficMonitorPipeSDDL()))
+		isInit.Store(true)
+	}
+	return cm.ReconcileRuntimeState()
+}
+
 func coreStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := cm.GetProcessInfo()
 	if err != nil {

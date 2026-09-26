@@ -44,41 +44,11 @@ func loadDesiredState() (desiredState, error) {
 
 func saveDesiredState(state desiredState) error {
 	path := desiredStatePath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("创建核心状态目录失败：%w", err)
-	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("设置核心状态目录权限失败：%w", err)
-	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化核心运行状态失败：%w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".desired_state-*")
-	if err != nil {
-		return fmt.Errorf("创建核心状态临时文件失败：%w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return fmt.Errorf("设置核心状态文件权限失败：%w", err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf("写入核心运行状态失败：%w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return fmt.Errorf("同步核心运行状态失败：%w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("关闭核心状态临时文件失败：%w", err)
-	}
-	if err := replaceStateFile(tmpPath, path); err != nil {
-		return fmt.Errorf("替换核心运行状态失败：%w", err)
-	}
-	return nil
+	return atomicWriteFile(path, data, 0o600)
 }
 
 func replaceStateFile(tempPath, path string) error {
