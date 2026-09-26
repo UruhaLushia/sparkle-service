@@ -109,16 +109,12 @@ func SaveLaunchProfile(profile LaunchProfile) error {
 		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("创建核心配置目录失败：%w", err)
-	}
-
 	data, err := json.MarshalIndent(normalized, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化核心启动配置失败：%w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := atomicWriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("保存核心启动配置失败：%w", err)
 	}
 
