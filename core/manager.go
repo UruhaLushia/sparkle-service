@@ -1,22 +1,19 @@
 package core
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
-	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/UruhaLushia/sparkle-service/core/controller"
 	"github.com/UruhaLushia/sparkle-service/core/process"
 	"github.com/UruhaLushia/sparkle-service/core/security"
-
-	ps "github.com/shirou/gopsutil/v4/process"
 )
 
 const (
@@ -25,6 +22,8 @@ const (
 	monitorInterval       = 1 * time.Second
 	takeoverGracePeriod   = 10 * time.Second
 	takeoverCheckInterval = 250 * time.Millisecond
+	maxCrashRestarts      = 3
+	maxRestartBackoff     = 30 * time.Second
 	startupBufferLimit    = 128 * 1024
 	startupLineLimit      = 16 * 1024
 )
@@ -41,6 +40,7 @@ type CoreManager struct {
 	pid                    atomic.Int32
 	mutex                  sync.Mutex
 	stopChan               chan struct{}
+	restartAttempts        int
 	trafficMonitorPipeSDDL string
 }
 
@@ -268,9 +268,61 @@ func (cm *CoreManager) monitorProcess(cmd *exec.Cmd, errBuffer *boundedOutputBuf
 	} else {
 		log.Printf("核心进程已退出 (PID: %d)", cmd.Process.Pid)
 	}
-	cm.publishCoreEvent(cm.newCoreEvent(CoreEventExited, "核心进程已退出", err, int32(cmd.Process.Pid), 0))
+	reason := processExitReason(err, errBuffer.String())
+	crashed := reason == "panic" || reason == "signal"
+	message := "核心进程已正常退出"
+	switch reason {
+	case "panic":
+		message = "核心进程 panic 崩溃"
+	case "signal":
+		message = "核心进程被信号终止"
+	case "exit_error":
+		message = "核心进程错误退出，跳过自动重启"
+	}
+	cm.publishCoreEvent(cm.newCoreEvent(CoreEventExited, message, err, int32(cmd.Process.Pid), 0))
+	if !crashed {
+		if runtime.GOOS == "windows" && cm.takeoverRestartedProcess() {
+			return
+		}
+		cm.finishExpectedProcessExit(cmd)
+		return
+	}
 
 	cm.handleProcessExit()
+}
+
+func processExitReason(err error, output string) string {
+	if strings.Contains(strings.ToLower(output), "panic:") {
+		return "panic"
+	}
+	if err == nil {
+		return "normal"
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return "abnormal"
+	}
+	if exitErr.ProcessState.ExitCode() == 0 {
+		return "normal"
+	}
+	if exitErr.ProcessState.ExitCode() < 0 {
+		return "signal"
+	}
+	return "exit_error"
+}
+
+func (cm *CoreManager) finishExpectedProcessExit(cmd *exec.Cmd) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	if cm.cmd != cmd {
+		return
+	}
+	cm.monitoring.Store(false)
+	cm.signalStopLocked()
+	cm.cleanupLocked()
+	if err := clearDesiredState(); err != nil {
+		log.Printf("保存核心正常退出状态失败: %v", err)
+	}
 }
 
 func (cm *CoreManager) monitorStartupNotifications(launch *launchSession, stopChan <-chan struct{}) {
@@ -350,6 +402,16 @@ func (cm *CoreManager) handleProcessExit() {
 		profile = cm.launch.profile
 		access = cm.launch.fileAccess
 	}
+	cm.restartAttempts++
+	if cm.restartAttempts > maxCrashRestarts {
+		cm.emitCoreEvent(CoreEventRestartFailed, "核心崩溃重启次数达到上限，已停止自动恢复", nil)
+		cm.monitoring.Store(false)
+		cm.signalStopLocked()
+		cm.cleanupLocked()
+		cm.mutex.Unlock()
+		log.Printf("核心崩溃重启次数达到上限，停止自动恢复")
+		return
+	}
 	cm.emitCoreEvent(CoreEventRestarting, "核心异常退出，正在重启", nil)
 	cm.monitoring.Store(false)
 	cm.signalStopLocked()
@@ -358,9 +420,11 @@ func (cm *CoreManager) handleProcessExit() {
 
 	go func() {
 		for retries := range 3 {
+			if retries > 0 {
+				time.Sleep(restartBackoff(retries))
+			}
 			if err := cm.StartCoreWithProfile(&profile, withFileAccess(access)); err != nil {
 				log.Printf("重启核心进程失败 (尝试 %d/3): %v", retries+1, err)
-				time.Sleep(time.Second * time.Duration(retries+1))
 				continue
 			}
 			log.Println("核心进程已成功重启")
@@ -372,123 +436,15 @@ func (cm *CoreManager) handleProcessExit() {
 	}()
 }
 
-func (cm *CoreManager) takeoverRestartedProcess() bool {
-	deadline := time.Now().Add(takeoverGracePeriod)
-
-	for time.Now().Before(deadline) {
-		cm.mutex.Lock()
-		if !cm.monitoring.Load() || !cm.isRunning.Load() || cm.controller == nil || cm.launch == nil {
-			cm.mutex.Unlock()
-			return false
-		}
-
-		oldPID := cm.pid.Load()
-		controller := cm.controller
-		launch := cm.launch
-		cm.mutex.Unlock()
-
-		newPID, ok := findManagedCorePID(controller, oldPID, launch)
-		if ok {
-			if err := security.SecureBinary(launch.sourcePath); err != nil {
-				log.Printf("重新接管前加固核心文件失败: %v", err)
-				_ = controller.Stop(newPID)
-				return false
-			}
-			if err := hardenLaunchControllerEndpoint(launch); err != nil {
-				log.Printf("重新接管前加固核心控制器 IPC 失败: %v", err)
-				_ = controller.Stop(newPID)
-				return false
-			}
-
-			cm.mutex.Lock()
-			if cm.monitoring.Load() && cm.controller == controller {
-				cm.cmd = nil
-				cm.pid.Store(newPID)
-				cm.updateStartTimeFromPIDLocked(newPID)
-				cm.startPIDPollingLocked(cm.stopChan)
-				cm.mutex.Unlock()
-				log.Printf("核心进程已重新接管 (PID: %d -> %d)", oldPID, newPID)
-				cm.publishCoreEvent(cm.newCoreEvent(CoreEventTakeover, "核心进程已重新接管", nil, newPID, oldPID))
-				return true
-			}
-			cm.mutex.Unlock()
-			return false
-		}
-
-		time.Sleep(takeoverCheckInterval)
+func restartBackoff(attempt int) time.Duration {
+	if attempt <= 0 {
+		return 0
 	}
-
-	return false
-}
-
-func findManagedCorePID(controller process.Controller, oldPID int32, launch *launchSession) (int32, bool) {
-	pids, err := controller.PIDs()
-	if err != nil {
-		log.Printf("查询核心进程组失败: %v", err)
-		return 0, false
+	delay := time.Second << min(attempt-1, 5)
+	if delay > maxRestartBackoff {
+		return maxRestartBackoff
 	}
-
-	var bestPID int32
-	var bestCreateTime int64
-	for _, pid := range pids {
-		if pid <= 0 || pid == oldPID {
-			continue
-		}
-		if !isCoreProcessCandidate(pid, launch) {
-			continue
-		}
-
-		createTime := int64(0)
-		if proc, err := ps.NewProcess(pid); err == nil {
-			if value, err := proc.CreateTime(); err == nil {
-				createTime = value
-			}
-		}
-		if bestPID == 0 || createTime >= bestCreateTime {
-			bestPID = pid
-			bestCreateTime = createTime
-		}
-	}
-
-	return bestPID, bestPID != 0
-}
-
-func isCoreProcessCandidate(pid int32, launch *launchSession) bool {
-	if launch == nil {
-		return false
-	}
-
-	proc, err := ps.NewProcess(pid)
-	if err != nil {
-		return false
-	}
-
-	expectedName := strings.ToLower(filepath.Base(launch.executablePath))
-	if name, err := proc.Name(); err == nil && strings.ToLower(name) == expectedName {
-		return true
-	}
-
-	if exe, err := proc.Exe(); err == nil && strings.EqualFold(exe, launch.executablePath) {
-		return true
-	}
-
-	return false
-}
-
-func (cm *CoreManager) updateStartTimeFromPIDLocked(pid int32) {
-	proc, err := ps.NewProcess(pid)
-	if err != nil {
-		cm.startTime = time.Now()
-		return
-	}
-
-	createTime, err := proc.CreateTime()
-	if err != nil {
-		cm.startTime = time.Now()
-		return
-	}
-
-	cm.startTime = time.UnixMilli(createTime)
+	return delay
 }
 
 func (cm *CoreManager) startPIDPollingLocked(stopChan <-chan struct{}) {
@@ -529,181 +485,4 @@ func (cm *CoreManager) monitorPID(stopChan <-chan struct{}) {
 			return
 		}
 	}
-}
-
-func (cm *CoreManager) waitForStartup(launch *launchSession, errBuffer *boundedOutputBuffer, startupFatal <-chan error, processDone <-chan error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
-	defer cancel()
-
-	if launch.waitReady == nil {
-		return fmt.Errorf("核心启动通知未初始化")
-	}
-
-	ready := make(chan error, 1)
-	go func() {
-		ready <- launch.waitReady(ctx)
-	}()
-
-	for {
-		select {
-		case err := <-ready:
-			if err != nil {
-				return fmt.Errorf("等待核心 post-up 通知失败：%w", err)
-			}
-			return nil
-		case err := <-startupFatal:
-			if err != nil {
-				return err
-			}
-		case err := <-processDone:
-			if err != nil {
-				return fmt.Errorf("核心进程启动前退出：%w，错误输出: %s", err, errBuffer.String())
-			}
-			return fmt.Errorf("核心进程启动前退出")
-		case <-ctx.Done():
-			return fmt.Errorf("启动核心进程超时")
-		}
-	}
-}
-
-func hardenLaunchControllerEndpoint(launch *launchSession) error {
-	if launch == nil {
-		return nil
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		err := controller.HardenEndpoint(launch.controllerNet, launch.controllerAddr)
-		if err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return err
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}
-
-func startupFatalLineError(line string) error {
-	lower := strings.ToLower(line)
-	switch {
-	case strings.Contains(lower, fatalIndicator):
-		return extractFatalError(line)
-	case strings.Contains(line, "External controller pipe listen error"),
-		strings.Contains(line, "External controller unix listen error"),
-		strings.Contains(line, "External controller listen error"):
-		return fmt.Errorf("控制器监听失败：%s", strings.TrimSpace(line))
-	case strings.Contains(line, "Start TUN listening error"):
-		return fmt.Errorf("虚拟网卡启动失败：%s", strings.TrimSpace(line))
-	default:
-		return nil
-	}
-}
-
-func (cm *CoreManager) IsHealthy() bool {
-	if !cm.isRunning.Load() {
-		return false
-	}
-
-	info, err := cm.GetProcessInfo()
-	if err != nil {
-		return false
-	}
-
-	if info.Memory > 1024*1024*1024 {
-		log.Printf("警告: 核心进程内存使用过高 (%s)", info.MemoryFormat)
-	}
-
-	return true
-}
-
-func (cm *CoreManager) GetProcessInfo() (*ProcessInfo, error) {
-	cm.mutex.Lock()
-	pid := cm.pid.Load()
-	startTime := cm.startTime
-	launch := cm.launch
-	cm.mutex.Unlock()
-
-	if !cm.isRunning.Load() || pid <= 0 {
-		return nil, fmt.Errorf("进程未运行")
-	}
-
-	proc, err := ps.NewProcess(pid)
-	if err != nil {
-		return nil, fmt.Errorf("获取进程信息失败：%w", err)
-	}
-
-	info := &ProcessInfo{
-		PID:       pid,
-		StartTime: startTime,
-		Uptime:    formatUptime(time.Since(startTime)),
-	}
-	if launch != nil {
-		info.LaunchMode = "managed"
-		info.Executable = launch.sourcePath
-	}
-
-	if memInfo, err := proc.MemoryInfo(); err == nil {
-		info.Memory = memInfo.RSS
-		info.MemoryFormat = formatMemory(memInfo.RSS)
-	}
-	if cpuPercent, err := proc.CPUPercent(); err == nil {
-		info.CPUPercent = cpuPercent
-	}
-	if affinity, err := proc.CPUAffinity(); err == nil {
-		info.CPUAffinity = make([]int, 0, len(affinity))
-		for _, cpu := range affinity {
-			info.CPUAffinity = append(info.CPUAffinity, int(cpu))
-		}
-	}
-
-	return info, nil
-}
-
-func formatMemory(bytes uint64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-	)
-
-	switch {
-	case bytes >= GB:
-		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(GB))
-	case bytes >= MB:
-		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(MB))
-	case bytes >= KB:
-		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(KB))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
-}
-
-func formatUptime(d time.Duration) string {
-	days := int(d.Hours()) / 24
-	hours := int(d.Hours()) % 24
-	minutes := int(d.Minutes()) % 60
-	seconds := int(d.Seconds()) % 60
-
-	parts := make([]string, 0, 4)
-	if days > 0 {
-		parts = append(parts, fmt.Sprintf("%dd", days))
-	}
-	if hours > 0 || len(parts) > 0 {
-		parts = append(parts, fmt.Sprintf("%dh", hours))
-	}
-	if minutes > 0 || len(parts) > 0 {
-		parts = append(parts, fmt.Sprintf("%dm", minutes))
-	}
-	parts = append(parts, fmt.Sprintf("%ds", seconds))
-
-	return strings.Join(parts, " ")
-}
-
-func extractFatalError(output string) error {
-	if _, after, ok := strings.Cut(output, "level=fatal msg="); ok {
-		msg := strings.TrimSpace(after)
-		return fmt.Errorf("启动核心进程失败: %s", msg)
-	}
-	return fmt.Errorf("启动核心进程失败：发现致命错误")
 }
