@@ -112,7 +112,15 @@ func (cm *CoreManager) startCoreLocked(profile *LaunchProfile, options launchOpt
 
 	cm.stopChan = make(chan struct{})
 
-	return cm.startProcessLocked(profile, options)
+	if err := cm.startProcessLocked(profile, options); err != nil {
+		return err
+	}
+	if cm.launch != nil {
+		if err := persistDesiredState(true, cm.launch.profile); err != nil {
+			log.Printf("保存核心运行状态失败: %v", err)
+		}
+	}
+	return nil
 }
 
 func (cm *CoreManager) StopCore() error {
@@ -124,6 +132,9 @@ func (cm *CoreManager) StopCore() error {
 
 func (cm *CoreManager) stopCoreLocked() error {
 	if cm.pid.Load() == 0 && cm.controller == nil && cm.launch == nil && !cm.isRunning.Load() {
+		if err := clearDesiredState(); err != nil {
+			log.Printf("保存核心停止状态失败: %v", err)
+		}
 		return nil
 	}
 
@@ -133,6 +144,9 @@ func (cm *CoreManager) stopCoreLocked() error {
 
 	stopErr := cm.stopProcessLocked()
 	cm.cleanupLocked()
+	if err := clearDesiredState(); err != nil {
+		log.Printf("保存核心停止状态失败: %v", err)
+	}
 	if stopErr != nil {
 		return stopErr
 	}

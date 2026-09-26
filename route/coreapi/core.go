@@ -52,6 +52,14 @@ func Stop() error {
 	return cm.StopCore()
 }
 
+func RestoreDesiredState() error {
+	if !isInit.Load() || cm == nil {
+		cm = corepkg.NewCoreManager(corepkg.WithTrafficMonitorPipeSDDL(trafficMonitorPipeSDDL()))
+		isInit.Store(true)
+	}
+	return cm.RestoreDesiredState()
+}
+
 func coreStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := cm.GetProcessInfo()
 	if err != nil {
