@@ -378,6 +378,9 @@ func (cm *CoreManager) handleStartupNotification(launch *launchSession) {
 	cm.mutex.Unlock()
 
 	if newPID != oldPID {
+		if err := writeRuntimeRecord(newPID, launch); err != nil {
+			log.Printf("更新启动通知接管后的核心运行记录失败: %v", err)
+		}
 		log.Printf("核心进程已通过启动通知重新接管 (PID: %d -> %d)", oldPID, newPID)
 		cm.publishCoreEvent(cm.newCoreEvent(CoreEventTakeover, "核心进程已重新接管", nil, newPID, oldPID))
 		return
