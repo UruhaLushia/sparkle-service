@@ -5,9 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 )
 
+var stateFileWriteMu sync.Mutex
+
 func atomicWriteFile(path string, data []byte, fileMode os.FileMode) error {
+	stateFileWriteMu.Lock()
+	defer stateFileWriteMu.Unlock()
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
