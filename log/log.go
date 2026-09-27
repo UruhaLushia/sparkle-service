@@ -120,12 +120,21 @@ func InitLogging() (*os.File, error) {
 func newLogger(ws zapcore.WriteSyncer) *zap.Logger {
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeCaller = encodeCaller
 	encoder := &jsonPrettyEncoder{
 		Encoder:    zapcore.NewJSONEncoder(encoderCfg),
 		pretty:     true,
 		stackArray: true,
 	}
-	return zap.New(zapcore.NewCore(encoder, ws, zapcore.InfoLevel), zap.AddCaller(), zap.AddCallerSkip(1))
+	return zap.New(zapcore.NewCore(encoder, ws, zapcore.InfoLevel), zap.AddCaller())
+}
+
+func encodeCaller(caller zapcore.EntryCaller, encoder zapcore.PrimitiveArrayEncoder) {
+	path := caller.File
+	if marker := "/sparkle-service/"; strings.Contains(path, marker) {
+		path = path[strings.Index(path, marker)+len(marker):]
+	}
+	encoder.AppendString(fmt.Sprintf("%s:%d", path, caller.Line))
 }
 
 func setLogger(newLog *zap.Logger) {
@@ -169,13 +178,13 @@ func Fatal(v ...any) {
 }
 
 func Print(v ...any) {
-	S().Info(fmt.Sprint(v...))
+	L().WithOptions(zap.AddCallerSkip(1)).Sugar().Info(fmt.Sprint(v...))
 }
 
 func Printf(format string, v ...any) {
-	S().Infof(format, v...)
+	L().WithOptions(zap.AddCallerSkip(1)).Sugar().Infof(format, v...)
 }
 
 func Println(v ...any) {
-	S().Info(strings.TrimSuffix(fmt.Sprintln(v...), "\n"))
+	L().WithOptions(zap.AddCallerSkip(1)).Sugar().Info(strings.TrimSuffix(fmt.Sprintln(v...), "\n"))
 }
