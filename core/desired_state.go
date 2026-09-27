@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -52,11 +51,6 @@ func saveDesiredState(state desiredState) error {
 }
 
 func replaceStateFile(tempPath, path string) error {
-	if runtime.GOOS == "windows" {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
 	return os.Rename(tempPath, path)
 }
 

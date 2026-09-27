@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 func atomicWriteFile(path string, data []byte, fileMode os.FileMode) error {
@@ -37,5 +38,20 @@ func atomicWriteFile(path string, data []byte, fileMode os.FileMode) error {
 	if err := replaceStateFile(tmpPath, path); err != nil {
 		return fmt.Errorf("替换状态文件失败：%w", err)
 	}
+	if err := syncStateDirectory(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("同步状态目录失败：%w", err)
+	}
 	return nil
+}
+
+func syncStateDirectory(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
