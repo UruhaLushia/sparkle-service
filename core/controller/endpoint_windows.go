@@ -6,11 +6,25 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/UruhaLushia/sparkle-service/core/security"
+	"github.com/UruhaLushia/sparkle-service/listen/namedpipe"
 
 	"golang.org/x/sys/windows"
 )
+
+func EndpointReachable(network, address string) bool {
+	if network != "pipe" {
+		return false
+	}
+	conn, err := namedpipe.DialTimeout(address, 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
 
 func CreatePrivateEndpoint() (string, string, func(), error) {
 	token, err := randomToken(16)

@@ -4,9 +4,23 @@ package controller
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"time"
 )
+
+func EndpointReachable(network, address string) bool {
+	if network != "unix" {
+		return false
+	}
+	conn, err := net.DialTimeout("unix", address, 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
 
 func CreatePrivateEndpoint() (string, string, func(), error) {
 	dir, err := os.MkdirTemp("", "sparkle-mihomo-controller-*")
