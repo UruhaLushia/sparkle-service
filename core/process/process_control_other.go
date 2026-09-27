@@ -53,12 +53,17 @@ func (c *noopProcessController) Stop(pid int32) error {
 	if pid <= 0 {
 		return nil
 	}
+	if err := syscall.Kill(-int(pid), syscall.SIGTERM); err != nil && err != syscall.ESRCH {
+		return err
+	}
+	if exited, err := waitForUnixProcessExit(pid, 20, 100*time.Millisecond); err != nil {
+		return err
+	} else if exited {
+		return nil
+	}
 
 	var stopErr error
-	if err := syscall.Kill(-int(pid), syscall.SIGTERM); err != nil && err != syscall.ESRCH {
-		stopErr = err
-	}
-	if err := syscall.Kill(-int(pid), syscall.SIGKILL); err != nil && err != syscall.ESRCH && stopErr == nil {
+	if err := syscall.Kill(-int(pid), syscall.SIGKILL); err != nil && err != syscall.ESRCH {
 		stopErr = err
 	}
 	if err := syscall.Kill(int(pid), syscall.SIGKILL); err != nil && err != syscall.ESRCH && stopErr == nil {
