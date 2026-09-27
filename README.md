@@ -152,7 +152,7 @@ GET /ping
 }
 ```
 
-`cpu_affinity` 使用从 0 开始的逻辑 CPU 编号。Windows 和 Linux 核心进程都会应用该绑定；Windows 受系统处理器组和进程亲和性掩码限制，当前支持单组内的 CPU 编号。
+`cpu_affinity` 使用从 0 开始的逻辑 CPU 编号。Windows 和 Linux 核心进程都会应用该绑定；Windows 受系统处理器组和进程亲和性掩码限制，当前支持单组内的 CPU 编号。macOS 没有公开的逻辑 CPU 硬绑定接口，仅报告 CPU 列表并拒绝非空 `cpu_affinity`，避免把软调度分组误报为核心绑定。
 
 ### 系统代理 `/sysproxy`
 

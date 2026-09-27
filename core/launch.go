@@ -252,7 +252,7 @@ func normalizeLaunchProfile(profile LaunchProfile) (LaunchProfile, error) {
 	if profile.SaveLogs != nil {
 		normalized.SaveLogs = new(*profile.SaveLogs)
 	}
-	if (runtime.GOOS == "linux" || runtime.GOOS == "windows") && len(profile.CPUAffinity) > 0 {
+	if (runtime.GOOS == "linux" || runtime.GOOS == "windows" || runtime.GOOS == "darwin") && len(profile.CPUAffinity) > 0 {
 		normalized.CPUAffinity = slices.Clone(profile.CPUAffinity)
 		for _, cpu := range normalized.CPUAffinity {
 			maxCPU := 1024
