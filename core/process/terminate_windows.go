@@ -26,7 +26,7 @@ func Terminate(pid int32) error {
 }
 
 func terminatePID(pid uint32) error {
-	handle, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, pid)
+	handle, err := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, pid)
 	if err != nil {
 		if err == windows.ERROR_INVALID_PARAMETER {
 			return nil
@@ -34,7 +34,14 @@ func terminatePID(pid uint32) error {
 		return fmt.Errorf("打开核心进程失败：%w", err)
 	}
 	defer windows.CloseHandle(handle)
-	if err := windows.TerminateProcess(handle, 1); err != nil && err != windows.ERROR_INVALID_HANDLE {
+	if err := windows.TerminateProcess(handle, 1); err != nil {
+		if err == windows.ERROR_INVALID_HANDLE {
+			return nil
+		}
+		// TerminateProcess returns access denied if the process already exited.
+		if state, waitErr := windows.WaitForSingleObject(handle, 0); waitErr == nil && state == windows.WAIT_OBJECT_0 {
+			return nil
+		}
 		return fmt.Errorf("终止核心进程失败：%w", err)
 	}
 	return nil

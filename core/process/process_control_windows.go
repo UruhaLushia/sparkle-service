@@ -146,10 +146,13 @@ func (c *windowsProcessController) Stop(pid int32) error {
 		return closeErr
 	}
 
-	cmd := exec.Command("taskkill", "/PID", fmt.Sprintf("%d", pid), "/T", "/F")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("终止核心进程失败：%w, output: %s", err, string(output))
+	if err := Terminate(pid); err != nil {
+		return err
+	}
+	if exited, err := waitForProcessExit(pid, 20, 100*time.Millisecond); err != nil {
+		return err
+	} else if !exited {
+		return fmt.Errorf("等待核心进程退出超时：PID %d", pid)
 	}
 
 	return closeErr
