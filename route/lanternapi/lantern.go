@@ -103,7 +103,7 @@ func (m *manager) runningLocked() bool {
 }
 
 func (m *manager) snapshotLocked() snapshot {
-	v := snapshot{Supported: runtime.GOOS == "linux", Running: m.runningLocked(), Options: m.options,
+	v := snapshot{Supported: runtime.GOOS == "linux" || runtime.GOOS == "darwin", Running: m.runningLocked(), Options: m.options,
 		Probe: m.lastProbe, Status: lantern.Status{State: "idle"}, Devices: []device.Device{}}
 	v.GatewayMode = v.Running && m.options != nil && m.options.GatewayMode
 	if m.controller != nil {
@@ -119,8 +119,8 @@ func (m *manager) status(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *manager) start(w http.ResponseWriter, r *http.Request, stateDir string) {
-	if runtime.GOOS != "linux" {
-		httphelper.SendError(w, httphelper.NewError(http.StatusNotImplemented, "局域网网关暂仅支持 Linux"))
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		httphelper.SendError(w, httphelper.NewError(http.StatusNotImplemented, "局域网网关仅支持 Linux 和 macOS"))
 		return
 	}
 	var opts startOptions
