@@ -4,10 +4,12 @@ import (
 	"github.com/UruhaLushia/sparkle-service/route/auth"
 	"github.com/UruhaLushia/sparkle-service/route/coreapi"
 	"github.com/UruhaLushia/sparkle-service/route/httphelper"
+	"github.com/UruhaLushia/sparkle-service/route/lanternapi"
 	"github.com/UruhaLushia/sparkle-service/route/serviceapi"
 	"github.com/UruhaLushia/sparkle-service/route/sysapi"
 	"github.com/UruhaLushia/sparkle-service/route/sysproxyapi"
 	"net/http"
+	"path/filepath"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -33,6 +35,7 @@ func router() *chi.Mux {
 		r.Mount("/sysproxy", sysproxyapi.Router())
 		r.Mount("/core", coreapi.Router())
 		r.Mount("/sys", sysapi.Router())
+		r.Mount("/lantern", lanternapi.Router(filepath.Join(GetConfigDir(), "sparkle", "lantern")))
 	})
 	return r
 }
