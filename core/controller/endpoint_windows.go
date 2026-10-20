@@ -38,7 +38,7 @@ func HardenEndpoint(network string, address string) error {
 	if network != "pipe" {
 		return nil
 	}
-	if err := security.RestrictPath(address, windows.NO_INHERITANCE); err != nil {
+	if err := security.RestrictPath(address, windows.NO_INHERITANCE, false); err != nil {
 		return fmt.Errorf("加固核心控制器 pipe 权限失败：%w", err)
 	}
 	return nil

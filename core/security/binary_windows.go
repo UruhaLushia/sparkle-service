@@ -10,22 +10,22 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func SecureBinary(corePath string) error {
-	if os.Getenv("SPARKLE_SKIP_CORE_ACL_HARDENING") == "1" {
+func SecureBinary(corePath string, skipHardening bool) error {
+	if skipHardening || os.Getenv("SPARKLE_SKIP_CORE_ACL_HARDENING") == "1" {
 		return nil
 	}
 
-	if err := RestrictPath(filepath.Dir(corePath), windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT); err != nil {
+	if err := RestrictPath(filepath.Dir(corePath), windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT, true); err != nil {
 		return fmt.Errorf("加固核心目录权限失败：%w", err)
 	}
-	if err := RestrictPath(corePath, windows.NO_INHERITANCE); err != nil {
+	if err := RestrictPath(corePath, windows.NO_INHERITANCE, true); err != nil {
 		return fmt.Errorf("加固核心文件权限失败：%w", err)
 	}
 
 	return nil
 }
 
-func RestrictPath(path string, inheritance uint32) error {
+func RestrictPath(path string, inheritance uint32, allowUsersReadExecute bool) error {
 	currentSID, err := CurrentProcessSID()
 	if err != nil {
 		return err
@@ -39,11 +39,21 @@ func RestrictPath(path string, inheritance uint32) error {
 		return err
 	}
 
-	acl, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{
-		fullAccessEntry(currentSID, windows.TRUSTEE_IS_USER, inheritance),
-		fullAccessEntry(systemSID, windows.TRUSTEE_IS_USER, inheritance),
-		fullAccessEntry(adminSID, windows.TRUSTEE_IS_GROUP, inheritance),
-	}, nil)
+	entries := []windows.EXPLICIT_ACCESS{
+		accessEntry(currentSID, windows.TRUSTEE_IS_USER, inheritance, windows.GENERIC_ALL),
+		accessEntry(systemSID, windows.TRUSTEE_IS_USER, inheritance, windows.GENERIC_ALL),
+		accessEntry(adminSID, windows.TRUSTEE_IS_GROUP, inheritance, windows.GENERIC_ALL),
+	}
+	if allowUsersReadExecute {
+		usersSID, err := windows.CreateWellKnownSid(windows.WinBuiltinUsersSid)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, accessEntry(usersSID, windows.TRUSTEE_IS_GROUP, inheritance,
+			windows.FILE_GENERIC_READ|windows.FILE_GENERIC_EXECUTE))
+	}
+
+	acl, err := windows.ACLFromEntries(entries, nil)
 	if err != nil {
 		return err
 	}
@@ -59,9 +69,9 @@ func RestrictPath(path string, inheritance uint32) error {
 	)
 }
 
-func fullAccessEntry(sid *windows.SID, trusteeType windows.TRUSTEE_TYPE, inheritance uint32) windows.EXPLICIT_ACCESS {
+func accessEntry(sid *windows.SID, trusteeType windows.TRUSTEE_TYPE, inheritance uint32, permissions windows.ACCESS_MASK) windows.EXPLICIT_ACCESS {
 	return windows.EXPLICIT_ACCESS{
-		AccessPermissions: windows.GENERIC_ALL,
+		AccessPermissions: permissions,
 		AccessMode:        windows.GRANT_ACCESS,
 		Inheritance:       inheritance,
 		Trustee: windows.TRUSTEE{

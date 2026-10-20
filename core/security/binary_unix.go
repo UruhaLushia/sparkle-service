@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 )
 
-func SecureBinary(corePath string) error {
-	if os.Getenv("SPARKLE_SKIP_CORE_ACL_HARDENING") == "1" {
+func SecureBinary(corePath string, skipHardening bool) error {
+	if skipHardening || os.Getenv("SPARKLE_SKIP_CORE_ACL_HARDENING") == "1" {
 		return nil
 	}
 

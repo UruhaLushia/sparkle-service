@@ -22,6 +22,7 @@ import (
 
 type LaunchProfile struct {
 	CorePath         string            `json:"core_path,omitempty"`
+	SkipHardening    bool              `json:"skip_hardening,omitempty"`
 	Mode             string            `json:"mode,omitempty"`
 	Args             []string          `json:"args,omitempty"`
 	SafePaths        []string          `json:"safe_paths,omitempty"`
@@ -166,7 +167,7 @@ func (cm *CoreManager) prepareLaunchSession(profileOverride *LaunchProfile, opti
 		saveLogs = *profile.SaveLogs
 	}
 
-	if err := security.SecureBinary(corePath); err != nil {
+	if err := security.SecureBinary(corePath, profile.SkipHardening); err != nil {
 		return nil, err
 	}
 
@@ -236,6 +237,7 @@ func resolveLaunchProfile(profileOverride *LaunchProfile) (LaunchProfile, error)
 func normalizeLaunchProfile(profile LaunchProfile) (LaunchProfile, error) {
 	normalized := LaunchProfile{
 		CorePath:         strings.TrimSpace(profile.CorePath),
+		SkipHardening:    profile.SkipHardening,
 		Mode:             strings.ToLower(strings.TrimSpace(profile.Mode)),
 		Priority:         strings.TrimSpace(profile.Priority),
 		LogPath:          strings.TrimSpace(profile.LogPath),
@@ -437,6 +439,7 @@ func coreArgName(arg string) (string, bool) {
 
 func isZeroLaunchProfile(profile LaunchProfile) bool {
 	return profile.CorePath == "" &&
+		!profile.SkipHardening &&
 		(profile.Mode == "" || profile.Mode == CoreRunModeAuto) &&
 		profile.Priority == "" &&
 		len(profile.CPUAffinity) == 0 &&
