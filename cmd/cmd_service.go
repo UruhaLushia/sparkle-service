@@ -154,6 +154,9 @@ var serviceUninstallCmd = &cobra.Command{
 		if err := s.Uninstall(); err != nil {
 			return outputServiceCommandError("uninstall", "卸载服务失败", err)
 		}
+		if err := cleanupServiceRuntimeExecutable(); err != nil {
+			return outputServiceCommandError("uninstall", "清理服务运行副本失败", err)
+		}
 		return outputServiceCommandResult("服务卸载成功", serviceCommandStatus{Action: "uninstall", State: "not-installed"})
 	},
 }
